@@ -1,6 +1,8 @@
-export default async function handler(req, res) {
+// api/index.js
+
+module.exports = async (req, res) => {
     // --- CONFIGURATION ---
-    const targetBaseUrl = fi11.bot-hosting.net:21270';
+    const targetBaseUrl = 'http://65.108.39.249:21270';
     // ---------------------
 
     // 1. Set CORS Headers
@@ -26,9 +28,7 @@ export default async function handler(req, res) {
         }
     });
 
-    // 4. PREPARE BODY (THE FIX)
-    // Vercel sometimes parses req.body into an object, sometimes leaves it as string/buffer.
-    // We need to ensure we send a STRING to the backend, but not double-encode it.
+    // 4. PREPARE BODY (THE FIX for 422 Errors)
     let bodyData;
     
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -42,10 +42,9 @@ export default async function handler(req, res) {
     }
 
     console.log(`[PROXY] ${req.method} -> ${targetUrl}`);
-    // Uncomment the line below if you need to see the exact data being sent (for debugging)
-    // console.log(`[PAYLOAD]`, bodyData);
 
     try {
+        // Note: 'fetch' is native in Node.js 18+. Ensure your Vercel project uses Node 18 or 20.
         const response = await fetch(targetUrl, {
             method: req.method,
             headers: {
@@ -79,4 +78,4 @@ export default async function handler(req, res) {
             details: error.message
         });
     }
-}
+};
