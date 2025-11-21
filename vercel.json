@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/webhook/:match*", "destination": "/api/proxy?id=:match*" }
+    { "source": "/(.*)", "destination": "/api/index.js" }
   ]
 }
