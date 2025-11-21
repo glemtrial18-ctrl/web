@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
     // --- CONFIGURATION ---
-    const targetBaseUrl = 'http://65.108.39.249:21270';
+    const targetBaseUrl = fi11.bot-hosting.net:21270';
     // ---------------------
 
     // 1. Set CORS Headers
