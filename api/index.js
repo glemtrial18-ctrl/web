@@ -1,5 +1,6 @@
-// 1. TELL VERCEL NOT TO PARSE THE BODY
-// This is the most important part. It stops Vercel from corrupting the data.
+// api/webhook.js
+
+// 1. Disable Auto-Parsing
 module.exports.config = {
     api: {
         bodyParser: false,
@@ -11,63 +12,55 @@ module.exports.default = async (req, res) => {
     const { id } = req.query;
 
     if (!id) {
-        return res.status(400).json({ error: 'Webhook ID is missing from URL parameters.' });
+        return res.status(400).json({ error: 'Missing ID' });
     }
 
     const targetUrl = `${PROTECTOR_BASE_URL}/webhook/${id}`;
 
-    // 2. READ RAW DATA MANUALLY
-    // Since we disabled the parser, we grab the raw chunks of data
+    // 2. Capture Raw Data
     const chunks = [];
     for await (const chunk of req) {
         chunks.push(chunk);
     }
     const rawBody = Buffer.concat(chunks);
+    const bodyString = rawBody.toString('utf8');
 
-    // 3. PREPARE HEADERS
+    // --- DEBUG LOGGING ---
+    console.log(`[INCOMING] Method: ${req.method}`);
+    console.log(`[INCOMING] ID: ${id}`);
+    console.log(`[INCOMING] Body Type: ${typeof bodyString}`);
+    console.log(`[INCOMING] Raw Body Payload:`, bodyString); // <--- CHECK THIS IN VERCEL LOGS
+    // ---------------------
+
+    // 3. Forward Headers
     const forwardHeaders = {};
     Object.keys(req.headers).forEach(key => {
-        // Clean up headers that might confuse the backend
         if (!['host', 'content-length', 'connection', 'accept-encoding', 'content-encoding'].includes(key.toLowerCase())) {
             forwardHeaders[key] = req.headers[key];
         }
     });
-
-    // Add IP forwarding
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    forwardHeaders['x-forwarded-for'] = clientIp;
+    forwardHeaders['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     try {
-        // 4. SEND RAW DATA TO BACKEND
         const response = await fetch(targetUrl, {
             method: req.method,
             headers: {
                 ...forwardHeaders,
-                // Ensure Content-Type is passed correctly. 
-                // If Roblox didn't send one, default to JSON.
                 'Content-Type': req.headers['content-type'] || 'application/json'
             },
-            body: rawBody // Send the raw bytes exactly as received
+            body: rawBody
         });
 
         const responseBody = await response.text();
         
-        // 5. RETURN RESPONSE
+        console.log(`[BACKEND RESPONSE] Status: ${response.status}`);
+        console.log(`[BACKEND RESPONSE] Body: ${responseBody}`);
+
         res.status(response.status);
-
-        response.headers.forEach((value, key) => {
-            if (!['transfer-encoding', 'content-encoding', 'content-length'].includes(key.toLowerCase())) {
-                res.setHeader(key, value);
-            }
-        });
-
         res.send(responseBody);
 
     } catch (error) {
         console.error("Proxy Error:", error);
-        res.status(502).json({
-            error: 'Failed to reach backend.',
-            details: error.message
-        });
+        res.status(502).json({ error: error.message });
     }
 };
