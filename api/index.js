@@ -8,21 +8,31 @@ module.exports = async (req, res) => {
 
     const targetUrl = `${PROTECTOR_BASE_URL}/webhook/${id}`;
 
+    // 1. Prepare Headers
     const forwardHeaders = {};
     Object.keys(req.headers).forEach(key => {
+        // Remove headers that confuse the connection or length
         if (!['host', 'content-length', 'connection', 'accept-encoding'].includes(key.toLowerCase())) {
             forwardHeaders[key] = req.headers[key];
         }
     });
 
+    // 2. Add IP Forwarding
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     forwardHeaders['x-forwarded-for'] = clientIp;
 
+    // 3. PREPARE BODY (The Fix for 422)
     let bodyData;
+    
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-        if (req.body && typeof req.body === 'object') {
+        if (Buffer.isBuffer(req.body)) {
+            // CASE A: It is a raw Buffer -> Convert to String
+            bodyData = req.body.toString('utf8');
+        } else if (typeof req.body === 'object') {
+            // CASE B: Vercel parsed it to Object -> Convert back to JSON String
             bodyData = JSON.stringify(req.body);
         } else {
+            // CASE C: It is already a string -> Send as is
             bodyData = req.body;
         }
     }
@@ -32,6 +42,7 @@ module.exports = async (req, res) => {
             method: req.method,
             headers: {
                 ...forwardHeaders,
+                // Ensure we tell the backend this is JSON
                 'Content-Type': req.headers['content-type'] || 'application/json'
             },
             body: bodyData
@@ -41,6 +52,7 @@ module.exports = async (req, res) => {
         
         res.status(response.status);
 
+        // Forward headers back to you
         response.headers.forEach((value, key) => {
             if (!['transfer-encoding', 'content-encoding', 'content-length'].includes(key.toLowerCase())) {
                 res.setHeader(key, value);
@@ -50,8 +62,9 @@ module.exports = async (req, res) => {
         res.send(responseBody);
 
     } catch (error) {
+        console.error(error);
         res.status(502).json({
-            error: 'Failed to forward request to backend.',
+            error: 'Proxy Error',
             details: error.message
         });
     }
